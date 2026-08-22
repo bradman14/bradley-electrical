@@ -7,6 +7,6 @@ export default defineConfig({
   resolve: {
     alias: { '@': path.resolve(process.cwd(), 'src') },
   },
-  base: process.env.BASE_PATH || '/',
+  base: '/bradley-electrical/',
   build: { outDir: 'dist' },
 });
