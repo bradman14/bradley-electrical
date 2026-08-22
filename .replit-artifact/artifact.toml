@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/"
+title = "Bradley Electrical"
+description = "A premium, responsive electrical services website for Bradley Electrical in Mombasa, with service discovery, company information, contact details, and WhatsApp quote requests."
+version = "1.0.0"
+id = "artifacts/bradley-electrical"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 19999
+
+[services.development]
+run = "pnpm --filter @workspace/bradley-electrical run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/bradley-electrical", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/bradley-electrical/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "19999"
+BASE_PATH = "/"
