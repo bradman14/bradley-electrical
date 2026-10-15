@@ -1,18 +1,23 @@
-import { type FormEvent, type ReactNode, useEffect, useRef, useState } from 'react';
+import { type ChangeEvent, type FormEvent, type ReactNode, useEffect, useRef, useState } from 'react';
 import {
   ArrowDownRight,
+  AlertCircle,
   ArrowRight,
+  Camera,
   Check,
   CircuitBoard,
   ClipboardCheck,
   HardHat,
+  ImagePlus,
   Lightbulb,
   MapPin,
   Menu,
   MessageCircle,
   Phone,
+  RefreshCw,
   ShieldCheck,
   Sparkles,
+  Trash2,
   X,
   Zap,
 } from 'lucide-react';
@@ -49,6 +54,13 @@ const whyItems = [
   { title: 'Affordable Pricing', text: 'Straightforward recommendations and fair quotes without unnecessary surprises.', icon: <Sparkles /> },
 ];
 
+const MAX_PHOTO_BYTES = 5 * 1024 * 1024;
+const MAX_PHOTO_MB = MAX_PHOTO_BYTES / (1024 * 1024);
+
+function formatFileSize(bytes: number) {
+  return bytes < 1024 * 1024 ? `${Math.max(1, Math.round(bytes / 1024))} KB` : `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 function scrollToId(id: string) {
   document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
@@ -57,7 +69,12 @@ function Home() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [activeSection, setActiveSection] = useState('home');
   const [selectedService, setSelectedService] = useState<ServiceName | ''>('');
-  const [fileName, setFileName] = useState('');
+  const [photo, setPhoto] = useState<{ file: File; url: string } | null>(null);
+  const [photoError, setPhotoError] = useState('');
+  const [previewFailed, setPreviewFailed] = useState(false);
+  const photoUrlRef = useRef('');
+  const cameraInputRef = useRef<HTMLInputElement>(null);
+  const galleryInputRef = useRef<HTMLInputElement>(null);
   const [submitted, setSubmitted] = useState(false);
   const formRef = useRef<HTMLFormElement>(null);
 
@@ -91,6 +108,46 @@ function Home() {
     return () => revealObserver.disconnect();
   }, []);
 
+  // Release the temporary preview URL when the page is closed or left.
+  useEffect(() => () => {
+    if (photoUrlRef.current) URL.revokeObjectURL(photoUrlRef.current);
+  }, []);
+
+  const clearPhoto = () => {
+    if (photoUrlRef.current) URL.revokeObjectURL(photoUrlRef.current);
+    photoUrlRef.current = '';
+    setPhoto(null);
+    setPreviewFailed(false);
+  };
+
+  const handlePhotoChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const input = event.target;
+    const file = input.files?.[0];
+    input.value = ''; // lets the customer pick the same file again after removing it
+    if (!file) return; // picker was cancelled: keep any current photo
+
+    if (!file.type.startsWith('image/')) {
+      setPhotoError('That file is not an image. Please choose a photo (JPG, PNG or similar).');
+      return;
+    }
+    if (file.size > MAX_PHOTO_BYTES) {
+      setPhotoError(`That photo is ${formatFileSize(file.size)}. Please choose one smaller than ${MAX_PHOTO_MB} MB.`);
+      return;
+    }
+
+    if (photoUrlRef.current) URL.revokeObjectURL(photoUrlRef.current);
+    const url = URL.createObjectURL(file);
+    photoUrlRef.current = url;
+    setPhoto({ file, url });
+    setPreviewFailed(false);
+    setPhotoError('');
+  };
+
+  const removePhoto = () => {
+    clearPhoto();
+    setPhotoError('');
+  };
+
   const openQuote = (service?: ServiceName) => {
     if (service) setSelectedService(service);
     setMenuOpen(false);
@@ -121,7 +178,7 @@ function Home() {
       `Property Type: ${data.get('propertyType') || ''}`,
       `Location: ${data.get('location') || ''}`,
       `Description: ${data.get('description') || ''}`,
-      `Photo: ${fileName || 'Not attached'}`,
+      `Photo: ${photo ? `Selected (${photo.file.name}) - I will attach it in this chat` : 'Not attached'}`,
     ].join('\n');
 
     setSubmitted(true);
@@ -302,10 +359,39 @@ function Home() {
                 <div className="field"><label htmlFor="quote-property">Property Type *</label><select id="quote-property" name="propertyType" required defaultValue=""><option value="" disabled>Select property type</option><option>Home</option><option>Business</option><option>Office</option><option>Shop</option><option>Other</option></select></div>
                 <div className="field full"><label htmlFor="quote-location">Location *</label><input id="quote-location" name="location" required placeholder="Area or neighbourhood in Mombasa" /></div>
                 <div className="field full"><label htmlFor="quote-description">Description *</label><textarea id="quote-description" name="description" required placeholder="Tell us what you would like us to help with..." /></div>
-                <div className="field full"><label htmlFor="quote-photo">Photo</label><label className="file-label" htmlFor="quote-photo"><span className="file-name">{fileName || 'Optional — attach a photo of the issue or space'}</span><span className="file-action">Choose file</span><input id="quote-photo" name="photo" type="file" accept="image/*" onChange={(event) => setFileName(event.target.files?.[0]?.name || '')} /></label></div>
+                <div className="field full">
+                  <label htmlFor="quote-photo-camera">Photo (optional)</label>
+                  <input ref={cameraInputRef} id="quote-photo-camera" className="photo-input" type="file" accept="image/*" capture="environment" onChange={handlePhotoChange} tabIndex={-1} />
+                  <input ref={galleryInputRef} id="quote-photo-gallery" className="photo-input" type="file" accept="image/*" onChange={handlePhotoChange} tabIndex={-1} />
+                  {photo ? (
+                    <div className="photo-card">
+                      <div className="photo-preview">
+                        {previewFailed
+                          ? <div className="photo-preview-fallback"><ImagePlus size={22} /><span>Preview not available for this format, but your photo is selected.</span></div>
+                          : <img src={photo.url} alt="Preview of your selected photo" onError={() => setPreviewFailed(true)} />}
+                      </div>
+                      <div className="photo-meta"><strong title={photo.file.name}>{photo.file.name}</strong><span>{formatFileSize(photo.file.size)}</span></div>
+                      <div className="photo-actions">
+                        <button type="button" className="photo-btn" onClick={() => cameraInputRef.current?.click()}><RefreshCw size={13} /> Retake</button>
+                        <button type="button" className="photo-btn" onClick={() => galleryInputRef.current?.click()}><ImagePlus size={13} /> Replace</button>
+                        <button type="button" className="photo-btn photo-btn-danger" onClick={removePhoto}><Trash2 size={13} /> Remove</button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="photo-picker">
+                      <p>Optional — add a photo of the issue or space.</p>
+                      <div className="photo-actions">
+                        <button type="button" className="photo-btn photo-btn-primary" onClick={() => cameraInputRef.current?.click()}><Camera size={14} /> Take photo</button>
+                        <button type="button" className="photo-btn" onClick={() => galleryInputRef.current?.click()}><ImagePlus size={14} /> Choose from gallery</button>
+                      </div>
+                    </div>
+                  )}
+                  {photoError && <div className="photo-error" role="alert"><AlertCircle size={14} /> {photoError}</div>}
+                  <p className="photo-note">Max {MAX_PHOTO_MB} MB. Photos are not uploaded by this form. After WhatsApp opens, tap the attach (paperclip) button in the chat to send your photo.</p>
+                </div>
               </div>
               <div className="form-footer"><p>We will open WhatsApp with your information ready to send.</p><button className="button button-primary" type="submit">Send via WhatsApp <ArrowRight size={16} /></button></div>
-              {submitted && <div className="form-success" role="status"><Check size={14} /> Opening WhatsApp with your request...</div>}
+              {submitted && <div className="form-success" role="status"><Check size={14} /> Opening WhatsApp with your request...{photo && ' Remember to attach your photo manually in the chat.'}</div>}
             </form>
           </div>
         </section>
