@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /
+Sitemap: https://bradman14.github.io/bradley-electrical/sitemap.xml
